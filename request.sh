@@ -2,10 +2,6 @@
 
 # REF: http://docs.aws.amazon.com/AmazonS3/latest/API/sig-v4-header-based-auth.html
 
-# ENV: AWS_SECRET_ACCESS_KEY
-# ENV: AWS_ACCESS_KEY_ID
-# ENV: AWS_REGION (default 'us-east-1', overridden by $2 if supplied)
-
 HASH_ALGO=AWS4-HMAC-SHA256
 http_method=GET
 payload=
@@ -13,8 +9,11 @@ payload=
 host=$(echo "$1" | grep -oP '^(?!https?://)[^/?]+|(?<=^http://)[^/?]+|(?<=^https://)[^/?]+')
 canonical_uri='/'$(echo "$1" | grep -oP '(?<=[^/]/)[^/?][^?]*')
 canonical_query_string=$(echo "$1" | grep -oP '(?<=\?).*')
-aws_region=${2:-${AWS_REGION:-us-east-1}}
 timestamp=$(date -u +'%FT%TZ' | perl -pe 's/[-:]//g')
+
+aws_access_key_id=${2:-AWS_ACCESS_KEY_ID}
+aws_secret_access_key=${3:-AWS_SECRET_ACCESS_KEY}
+aws_region=${4:-${AWS_REGION:-us-east-1}}
 
 hex_hash () {
   str="$1"
@@ -41,7 +40,7 @@ string_to_sign=$(echo -e "$HASH_ALGO\n$timestamp\n$scope\n$canonical_request_has
 signing_key=
 for part in $(echo $scope | grep -oP '[^/]+')
 do
-  [ -z "$signing_key" ] && key="key:AWS4$AWS_SECRET_ACCESS_KEY"
+  [ -z "$signing_key" ] && key="key:AWS4$aws_secret_access_key"
   [ -n "$signing_key" ] && key="hexkey:$signing_key"
   signing_key=$(hex_hash "$part" "$key")
 done
@@ -50,7 +49,7 @@ done
 signature=$(hex_hash "$string_to_sign" hexkey:$signing_key)
 
 # Task 5: Authorization header
-authorization_header="Authorization:$HASH_ALGO Credential=$AWS_ACCESS_KEY_ID/$scope,SignedHeaders=$signed_headers,Signature=$signature"
+authorization_header="Authorization:$HASH_ALGO Credential=$aws_access_key_id/$scope,SignedHeaders=$signed_headers,Signature=$signature"
 
 # Task 6: Request
 headers="$authorization_header\n${canonical_headers::-2}" # remove tailing newline
